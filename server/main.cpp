@@ -3,53 +3,31 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
-#include <ldap.h>  // Correctly include LDAP library
+#include <fstream>
+#include <string>
+#include <ctime>
+#include <filesystem>
+#include <ldap.h>
 
 #define PORT 8080
 #define BUFFER_SIZE 1024
 
-// Function to authenticate user via LDAP
-bool authenticateWithLDAP(const std::string &username, const std::string &password) {
-    LDAP *ldap_handle;
-    LDAPMessage *result;
-    LDAPMessage *entry;
-    BerElement *ber;
-    char *dn;
-    
-    // Initialize LDAP connection
-    ldap_initialize(&ldap_handle, "ldap://localhost"); // Adjust your LDAP server address
-    if (ldap_handle == NULL) {
-        std::cerr << "LDAP initialization failed!" << std::endl;
-        return false;
-    }
-    
-    // Bind to LDAP server with the provided username and password
-    int version = LDAP_VERSION3;
-    ldap_set_option(ldap_handle, LDAP_OPT_PROTOCOL_VERSION, &version);
-    int bind_result = ldap_simple_bind_s(ldap_handle, username.c_str(), password.c_str());
+namespace fs = std::filesystem;
 
-    if (bind_result == LDAP_SUCCESS) {
-        // Search for the user in the LDAP directory (optional, you can skip if bind succeeds)
-        std::string base_dn = "ou=users,dc=example,dc=com"; // Change according to your LDAP structure
-        std::string filter = "(uid=" + username + ")";
-
-        int search_result = ldap_search_ext_s(ldap_handle, base_dn.c_str(), LDAP_SCOPE_SUBTREE, filter.c_str(), NULL, 0, NULL, NULL, NULL, 0, &result);
-        if (search_result == LDAP_SUCCESS) {
-            entry = ldap_first_entry(ldap_handle, result);
-            if (entry != NULL) {
-                dn = ldap_get_dn(ldap_handle, entry);
-                std::cout << "Authenticated user: " << dn << std::endl;
-                ldap_memfree(dn);
-                ldap_msgfree(result);
-                ldap_unbind(ldap_handle);
-                return true; // Authentication successful
-            }
-        }
+std::string getString(const std::string &buffer) {
+    size_t pos = buffer.find("\n");
+    if (pos != std::string::npos) {
+        return buffer.substr(0, pos);  // Extract substring before newline
     }
-    
-    // If bind failed or search didn’t find user, return false
-    ldap_unbind(ldap_handle);
-    return false;
+    return buffer;  // Return the entire buffer if no newline
+}
+
+std::string removeString(std::string &buffer, const std::string &toRemove) {
+    size_t pos = buffer.find(toRemove);
+    if (pos != std::string::npos) {
+        buffer.erase(pos, toRemove.length());  // Remove the found string
+    }
+    return buffer;
 }
 
 int main() {
@@ -113,21 +91,8 @@ int main() {
         std::string receivedMessage(buffer);
         if (receivedMessage.find("LOGIN") == 0) {
             std::cout << "Authentication requested...\n";
-            
-            // Parse the login details
-            size_t username_pos = receivedMessage.find("\n") + 1;
-            size_t password_pos = receivedMessage.find("\n", username_pos) + 1;
-            std::string username = receivedMessage.substr(username_pos, receivedMessage.find("\n", username_pos) - username_pos);
-            std::string password = receivedMessage.substr(password_pos);
-
-            // Authenticate the user
-            if (authenticateWithLDAP(username, password)) {
-                std::string response = "OK\n";
-                send(clientSocket, response.c_str(), response.size(), 0);
-            } else {
-                std::string errorResponse = "ERR\n";
-                send(clientSocket, errorResponse.c_str(), errorResponse.size(), 0);
-            }
+            std::string response = "OK\n";
+            send(clientSocket, response.c_str(), response.size(), 0);
         } else {
             std::string errorResponse = "ERR\n";
             send(clientSocket, errorResponse.c_str(), errorResponse.size(), 0);
@@ -138,4 +103,72 @@ int main() {
 
     close(serverSocket);
     return 0;
+}
+
+std::string login(const std::string &buffer, const std::string &folder) {
+    std::string bufferCopy = buffer;  // Create a copy for modification
+    std::string username = getString(bufferCopy);
+    std::string password = removeString(bufferCopy, username);
+
+    // LDAP (authentication) processing code
+    const char *ldapUri = "ldap://your-ldap-server";
+    int ldapVersion = LDAP_VERSION3;
+
+    char ldapBindUser[256];
+    sprintf(ldapBindUser, "uid=%s,ou=people,dc=technikum-wien,dc=at", username.c_str());
+    printf("user set to: %s\n", ldapBindUser);
+
+    char ldapBindPassword[256];
+    strcpy(ldapBindPassword, password.c_str());
+
+    int rc = 0; /* return code */
+    LDAP *ldapHandle;
+    rc = ldap_initialize(&ldapHandle, ldapUri);
+    if (rc != LDAP_SUCCESS) {
+        fprintf(stderr, "ldap_init failed\n");
+        return "ERR";
+    }
+    printf("Connected to LDAP server %s\n", ldapUri);
+
+    rc = ldap_set_option(ldapHandle, LDAP_OPT_PROTOCOL_VERSION, &ldapVersion);
+    if (rc != LDAP_OPT_SUCCESS) {
+        fprintf(stderr, "ldap_set_option(PROTOCOL_VERSION): %s\n", ldap_err2string(rc));
+        ldap_unbind_ext_s(ldapHandle, NULL, NULL);
+        return "ERR";
+    }
+
+    rc = ldap_start_tls_s(ldapHandle, NULL, NULL);
+    if (rc != LDAP_SUCCESS) {
+        fprintf(stderr, "ldap_start_tls_s(): %s\n", ldap_err2string(rc));
+        ldap_unbind_ext_s(ldapHandle, NULL, NULL);
+        return "ERR";
+    }
+
+    BerValue bindCredentials;
+    bindCredentials.bv_val = (char *)ldapBindPassword;
+    bindCredentials.bv_len = strlen(ldapBindPassword);
+    BerValue *servercredp; /* server's credentials */
+
+    rc = ldap_sasl_bind_s(ldapHandle, ldapBindUser, LDAP_SASL_SIMPLE, &bindCredentials, NULL, NULL, &servercredp);
+
+    ldap_unbind_ext_s(ldapHandle, NULL, NULL);
+
+    if (rc == LDAP_SUCCESS) {
+        std::cout << "Authentication successful\n";
+
+        std::string senderFolder = folder + "/" + username;
+        try {
+            if (!fs::exists(senderFolder)) {
+                fs::create_directory(senderFolder);
+            }
+        } catch (fs::filesystem_error &error) {
+            std::cerr << error.what() << std::endl;
+            return "ERR";
+        }
+
+        return "OK";
+    }
+
+    std::cerr << "Authentication failed\n";
+    return "ERR\nInvalid credentials or LDAP error.";
 }
