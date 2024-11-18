@@ -27,7 +27,7 @@ $(CLIENT_EXEC): $(CLIENT_OBJS)
 
 # Rule for building the server executable
 $(SERVER_EXEC): $(SERVER_OBJS)
-	$(CXX) $(CXXFLAGS) -o $(SERVER_EXEC) $(SERVER_OBJS)
+	$(CXX) $(CXXFLAGS) -o $(SERVER_EXEC) $(SERVER_OBJS) -lldap
 
 # Rule for compiling .cpp files into .o object files
 $(CLIENT_DIR)/%.o: $(CLIENT_DIR)/%.cpp

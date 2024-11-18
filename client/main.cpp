@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cstring>
 #include <unistd.h>
+#include <ldap.h> 
 #include <arpa/inet.h>
 #include "functions.h"
 

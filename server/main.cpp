@@ -3,9 +3,54 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include <ldap.h>  // Correctly include LDAP library
 
 #define PORT 8080
 #define BUFFER_SIZE 1024
+
+// Function to authenticate user via LDAP
+bool authenticateWithLDAP(const std::string &username, const std::string &password) {
+    LDAP *ldap_handle;
+    LDAPMessage *result;
+    LDAPMessage *entry;
+    BerElement *ber;
+    char *dn;
+    
+    // Initialize LDAP connection
+    ldap_initialize(&ldap_handle, "ldap://localhost"); // Adjust your LDAP server address
+    if (ldap_handle == NULL) {
+        std::cerr << "LDAP initialization failed!" << std::endl;
+        return false;
+    }
+    
+    // Bind to LDAP server with the provided username and password
+    int version = LDAP_VERSION3;
+    ldap_set_option(ldap_handle, LDAP_OPT_PROTOCOL_VERSION, &version);
+    int bind_result = ldap_simple_bind_s(ldap_handle, username.c_str(), password.c_str());
+
+    if (bind_result == LDAP_SUCCESS) {
+        // Search for the user in the LDAP directory (optional, you can skip if bind succeeds)
+        std::string base_dn = "ou=users,dc=example,dc=com"; // Change according to your LDAP structure
+        std::string filter = "(uid=" + username + ")";
+
+        int search_result = ldap_search_ext_s(ldap_handle, base_dn.c_str(), LDAP_SCOPE_SUBTREE, filter.c_str(), NULL, 0, NULL, NULL, NULL, 0, &result);
+        if (search_result == LDAP_SUCCESS) {
+            entry = ldap_first_entry(ldap_handle, result);
+            if (entry != NULL) {
+                dn = ldap_get_dn(ldap_handle, entry);
+                std::cout << "Authenticated user: " << dn << std::endl;
+                ldap_memfree(dn);
+                ldap_msgfree(result);
+                ldap_unbind(ldap_handle);
+                return true; // Authentication successful
+            }
+        }
+    }
+    
+    // If bind failed or search didn’t find user, return false
+    ldap_unbind(ldap_handle);
+    return false;
+}
 
 int main() {
     int serverSocket, clientSocket;
@@ -68,8 +113,21 @@ int main() {
         std::string receivedMessage(buffer);
         if (receivedMessage.find("LOGIN") == 0) {
             std::cout << "Authentication requested...\n";
-            std::string response = "OK\n";
-            send(clientSocket, response.c_str(), response.size(), 0);
+            
+            // Parse the login details
+            size_t username_pos = receivedMessage.find("\n") + 1;
+            size_t password_pos = receivedMessage.find("\n", username_pos) + 1;
+            std::string username = receivedMessage.substr(username_pos, receivedMessage.find("\n", username_pos) - username_pos);
+            std::string password = receivedMessage.substr(password_pos);
+
+            // Authenticate the user
+            if (authenticateWithLDAP(username, password)) {
+                std::string response = "OK\n";
+                send(clientSocket, response.c_str(), response.size(), 0);
+            } else {
+                std::string errorResponse = "ERR\n";
+                send(clientSocket, errorResponse.c_str(), errorResponse.size(), 0);
+            }
         } else {
             std::string errorResponse = "ERR\n";
             send(clientSocket, errorResponse.c_str(), errorResponse.size(), 0);
