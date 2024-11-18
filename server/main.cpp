@@ -1,8 +1,8 @@
 #include <iostream>
+#include <cstring>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
-#include <cstring>
 
 #define PORT 8080
 #define BUFFER_SIZE 1024
@@ -54,16 +54,27 @@ int main() {
 
         // Receive message from client
         memset(buffer, 0, BUFFER_SIZE);
-        if (recv(clientSocket, buffer, sizeof(buffer), 0) < 0) {
+        int bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+        if (bytesReceived <= 0) {
             std::cerr << "Recv failed!" << std::endl;
+            close(clientSocket);
             continue;
         }
 
-        std::cout << "Received: " << buffer << std::endl;
+        buffer[bytesReceived] = '\0';
+        std::cout << "Received: " << buffer;
 
-        // Send a response
-        std::string response = "OK\n";
-        send(clientSocket, response.c_str(), response.length(), 0);
+        // Check if login command
+        std::string receivedMessage(buffer);
+        if (receivedMessage.find("LOGIN") == 0) {
+            std::cout << "Authentication requested...\n";
+            std::string response = "OK\n";
+            send(clientSocket, response.c_str(), response.size(), 0);
+        } else {
+            std::string errorResponse = "ERR\n";
+            send(clientSocket, errorResponse.c_str(), errorResponse.size(), 0);
+        }
+
         close(clientSocket);  // Close the connection
     }
 
