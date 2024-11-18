@@ -55,21 +55,18 @@ int main() {
         // Receive message from client
         memset(buffer, 0, BUFFER_SIZE);
         if (recv(clientSocket, buffer, sizeof(buffer), 0) < 0) {
-            std::cerr << "Receiving message failed!" << std::endl;
-        } else {
-            std::cout << "Message from client: " << buffer << std::endl;
+            std::cerr << "Recv failed!" << std::endl;
+            continue;
         }
 
-        // Send a response back to the client
-        const char *response = "Message received";
-        send(clientSocket, response, strlen(response), 0);
+        std::cout << "Received: " << buffer << std::endl;
 
-        // Close the client socket after communication
-        close(clientSocket);
+        // Send a response
+        std::string response = "OK\n";
+        send(clientSocket, response.c_str(), response.length(), 0);
+        close(clientSocket);  // Close the connection
     }
 
-    // Close server socket (never reached in this case since the server runs indefinitely)
     close(serverSocket);
-
     return 0;
 }

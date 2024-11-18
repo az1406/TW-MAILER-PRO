@@ -7,7 +7,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-
 using namespace std;  // Local namespace usage to reduce repetition in this source file
 
 std::string getUserInput(const std::string &prompt) {
@@ -61,6 +60,7 @@ std::string handleLoginCommand(int socket) {
     string username = getUserInput("Enter LDAP username: ");
     string password = getUserInput("Enter password: ");
     string loginMessage = "LOGIN\n" + username + "\n" + password + "\n";
+    cout << "Sending login request: " << loginMessage << endl;  // Debugging message
     sendFormattedMessage(socket, loginMessage);
     return receiveServerResponse(socket);
 }
