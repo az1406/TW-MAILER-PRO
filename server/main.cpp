@@ -1,174 +1,163 @@
 #include <iostream>
+#include <csignal>
 #include <cstring>
 #include <unistd.h>
-#include <arpa/inet.h>
 #include <sys/socket.h>
-#include <fstream>
-#include <string>
-#include <ctime>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/wait.h>
+#include <cstdlib>
 #include <filesystem>
-#include <ldap.h>
+#include "functions.h"
 
-#define PORT 8080
-#define BUFFER_SIZE 1024
-
+using namespace std;
 namespace fs = std::filesystem;
+int main(int argc, char* argv[]) {
+    int childpid;
+   if (argc != 3) {
+      printUsage();
+   }
 
-std::string getString(const std::string &buffer) {
-    size_t pos = buffer.find("\n");
-    if (pos != std::string::npos) {
-        return buffer.substr(0, pos);  // Extract substring before newline
-    }
-    return buffer;  // Return the entire buffer if no newline
+   string folder = argv[2];
+
+   try {
+      if (!fs::is_directory(folder)) {
+         cout << folder << " does not exist. Creating now..." << endl;
+         fs::create_directory(folder);
+      }
+   } catch(fs::filesystem_error& error) {
+      cerr << error.what() << endl;
+      exit(EXIT_FAILURE);
+   }
+
+   socklen_t addrlen;
+   struct sockaddr_in address, cliaddress;
+   int reuseValue = 1;
+
+   if (signal(SIGINT, signalHandler) == SIG_ERR) {
+      perror("signal can not be registered");
+      return EXIT_FAILURE;
+   }
+
+   if ((create_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+      perror("Socket error");
+      return EXIT_FAILURE;
+   }
+
+   if (setsockopt(create_socket, SOL_SOCKET, SO_REUSEADDR, &reuseValue, sizeof(reuseValue)) == -1) {
+      perror("set socket options - reuseAddr");
+      return EXIT_FAILURE;
+   }
+
+   if (setsockopt(create_socket, SOL_SOCKET, SO_REUSEPORT, &reuseValue, sizeof(reuseValue)) == -1) {
+      perror("set socket options - reusePort");
+      return EXIT_FAILURE;
+   }
+
+   memset(&address, 0, sizeof(address));
+   address.sin_family = AF_INET;
+   address.sin_addr.s_addr = INADDR_ANY;
+
+   try {
+      if(stoi(argv[1]) < 1024 || stoi(argv[1]) > 65535) {
+         cerr << "Input Port is not in usable port range" << endl;
+         exit(EXIT_FAILURE);
+      }
+   } catch (invalid_argument& e1) {
+      cerr << "Port was not a number" << endl;
+      exit(EXIT_FAILURE);
+   }
+
+   address.sin_port = htons(stoi(argv[1]));
+
+   if (bind(create_socket, (struct sockaddr *)&address, sizeof(address)) == -1) {
+      perror("bind error");
+      return EXIT_FAILURE;
+   }
+
+   if (listen(create_socket, 5) == -1) {
+      perror("listen error");
+      return EXIT_FAILURE;
+   }
+
+   while (!abortRequested) {
+      printf("Waiting for connections...\n");
+
+      addrlen = sizeof(struct sockaddr_in);
+      if ((new_socket = accept(create_socket, (struct sockaddr *)&cliaddress, &addrlen)) == -1) {
+         if (abortRequested) {
+            perror("accept error after aborted");
+         } else {
+            perror("accept error");
+         }
+         break;
+      }
+
+      printf("Client connected from %s:%d...\n",
+             inet_ntoa(cliaddress.sin_addr),
+             ntohs(cliaddress.sin_port));
+
+      if ((childpid = fork()) == 0) {
+         close(create_socket);
+
+         clientIP = inet_ntoa(cliaddress.sin_addr);
+         clientCommunication(&new_socket, folder);
+
+         close(new_socket);
+         exit(EXIT_SUCCESS);
+      }
+
+      close(new_socket);
+   }
+
+   while ((childpid = waitpid(-1, NULL, WNOHANG))) {
+      if ((childpid == -1) && (errno != EINTR)) {
+         break;
+      }
+   }
+
+   if (create_socket != -1) {
+      if (shutdown(create_socket, SHUT_RDWR) == -1) {
+         perror("shutdown create_socket");
+      }
+      if (close(create_socket) == -1) {
+         perror("close create_socket");
+      }
+      create_socket = -1;
+   }
+
+   return EXIT_SUCCESS;
 }
 
-std::string removeString(std::string &buffer, const std::string &toRemove) {
-    size_t pos = buffer.find(toRemove);
-    if (pos != std::string::npos) {
-        buffer.erase(pos, toRemove.length());  // Remove the found string
-    }
-    return buffer;
-}
-
-int main() {
-    int serverSocket, clientSocket;
-    struct sockaddr_in serverAddr, clientAddr;
-    socklen_t clientAddrSize = sizeof(clientAddr);
-    char buffer[BUFFER_SIZE];
-
-    // Create a socket
-    serverSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (serverSocket < 0) {
-        std::cerr << "Socket creation failed!" << std::endl;
-        return 1;
-    }
-
-    // Set up server address
-    memset(&serverAddr, 0, sizeof(serverAddr));
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_addr.s_addr = INADDR_ANY;
-    serverAddr.sin_port = htons(PORT);
-
-    // Bind the socket
-    if (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
-        std::cerr << "Binding error: Port " << PORT << " is not available or already in use." << std::endl;
-        return 1;
-    }
-
-    std::cout << "Server is running and binding to port " << PORT << "...\n";
-
-    // Listen for incoming connections
-    if (listen(serverSocket, 5) < 0) {
-        std::cerr << "Listen failed!" << std::endl;
-        return 1;
-    }
-
-    std::cout << "Waiting for connections...\n";
-
-    // Accept incoming client connections in a loop
-    while (true) {
-        clientSocket = accept(serverSocket, (struct sockaddr *)&clientAddr, &clientAddrSize);
-        if (clientSocket < 0) {
-            std::cerr << "Accept failed!" << std::endl;
-            continue;
-        }
-
-        std::cout << "Client connected!\n";
-
-        // Receive message from client
-        memset(buffer, 0, BUFFER_SIZE);
-        int bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
-        if (bytesReceived <= 0) {
-            std::cerr << "Recv failed!" << std::endl;
-            close(clientSocket);
-            continue;
-        }
-
-        buffer[bytesReceived] = '\0';
-        std::cout << "Received: " << buffer;
-
-        // Check if login command
-        std::string receivedMessage(buffer);
-        if (receivedMessage.find("LOGIN") == 0) {
-            std::cout << "Authentication requested...\n";
-            std::string response = "OK\n";
-            send(clientSocket, response.c_str(), response.size(), 0);
-        } else {
-            std::string errorResponse = "ERR\n";
-            send(clientSocket, errorResponse.c_str(), errorResponse.size(), 0);
-        }
-
-        close(clientSocket);  // Close the connection
-    }
-
-    close(serverSocket);
-    return 0;
-}
-
-std::string login(const std::string &buffer, const std::string &folder) {
-    std::string bufferCopy = buffer;  // Create a copy for modification
-    std::string username = getString(bufferCopy);
-    std::string password = removeString(bufferCopy, username);
-
-    // LDAP (authentication) processing code
-    const char *ldapUri = "ldap://your-ldap-server";
-    int ldapVersion = LDAP_VERSION3;
-
-    char ldapBindUser[256];
-    sprintf(ldapBindUser, "uid=%s,ou=people,dc=technikum-wien,dc=at", username.c_str());
-    printf("user set to: %s\n", ldapBindUser);
-
-    char ldapBindPassword[256];
-    strcpy(ldapBindPassword, password.c_str());
-
-    int rc = 0; /* return code */
-    LDAP *ldapHandle;
-    rc = ldap_initialize(&ldapHandle, ldapUri);
-    if (rc != LDAP_SUCCESS) {
-        fprintf(stderr, "ldap_init failed\n");
-        return "ERR";
-    }
-    printf("Connected to LDAP server %s\n", ldapUri);
-
-    rc = ldap_set_option(ldapHandle, LDAP_OPT_PROTOCOL_VERSION, &ldapVersion);
-    if (rc != LDAP_OPT_SUCCESS) {
-        fprintf(stderr, "ldap_set_option(PROTOCOL_VERSION): %s\n", ldap_err2string(rc));
-        ldap_unbind_ext_s(ldapHandle, NULL, NULL);
-        return "ERR";
-    }
-
-    rc = ldap_start_tls_s(ldapHandle, NULL, NULL);
-    if (rc != LDAP_SUCCESS) {
-        fprintf(stderr, "ldap_start_tls_s(): %s\n", ldap_err2string(rc));
-        ldap_unbind_ext_s(ldapHandle, NULL, NULL);
-        return "ERR";
-    }
-
-    BerValue bindCredentials;
-    bindCredentials.bv_val = (char *)ldapBindPassword;
-    bindCredentials.bv_len = strlen(ldapBindPassword);
-    BerValue *servercredp; /* server's credentials */
-
-    rc = ldap_sasl_bind_s(ldapHandle, ldapBindUser, LDAP_SASL_SIMPLE, &bindCredentials, NULL, NULL, &servercredp);
-
-    ldap_unbind_ext_s(ldapHandle, NULL, NULL);
-
-    if (rc == LDAP_SUCCESS) {
-        std::cout << "Authentication successful\n";
-
-        std::string senderFolder = folder + "/" + username;
-        try {
-            if (!fs::exists(senderFolder)) {
-                fs::create_directory(senderFolder);
+void signalHandler(int sig) {
+    if (sig == SIGINT) {
+        printf("abort Requested... \n");
+        abortRequested = 1;
+        if (new_socket != -1) {
+            if (shutdown(new_socket, SHUT_RDWR) == -1) {
+                perror("shutdown new_socket");
             }
-        } catch (fs::filesystem_error &error) {
-            std::cerr << error.what() << std::endl;
-            return "ERR";
+            if (close(new_socket) == -1) {
+                perror("close new_socket");
+            }
+            new_socket = -1;
         }
 
-        return "OK";
+        if (create_socket != -1) {
+            if (shutdown(create_socket, SHUT_RDWR) == -1) {
+                perror("shutdown create_socket");
+            }
+            if (close(create_socket) == -1) {
+                perror("close create_socket");
+            }
+            create_socket = -1;
+        }
+    } else {
+        exit(sig);
     }
+}
 
-    std::cerr << "Authentication failed\n";
-    return "ERR\nInvalid credentials or LDAP error.";
+void printUsage(void) {
+    printf("Incorrect usage. Start the server using: \"./twmailer-server <port> <mail-spool-directoryname>\"\n");
+    exit(EXIT_FAILURE);
 }

@@ -2,11 +2,20 @@
 #define FUNCTIONS_H
 
 #include <string>
+using namespace std;
 
-std::string getUserInput(const std::string &prompt);
-std::pair<std::string, int> get_address_info_from_command_args(int argc, char **argv);
-void sendFormattedMessage(int socket, const std::string &message);
-std::string receiveServerResponse(int socket);
-std::string handleLoginCommand(int socket);
+bool isNameOk(const string& name);
+bool isSubjectOk(const string& subject);
+bool isMessageOk(const string& message);
+bool isNumberOk(const string& number);
+string login();
+string send();
+string list();
+string read();
+string del();
+bool printLogin(const string& response);
+bool printList(const string& response);
+bool printMessage(const string& response);
+bool printReply(const string& response);
 
-#endif // FUNCTIONS_H
+#endif
