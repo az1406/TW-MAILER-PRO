@@ -18,6 +18,9 @@ SERVER_OBJS = $(SERVER_SRCS:.cpp=.o)
 CLIENT_EXEC = twmailer-client
 SERVER_EXEC = twmailer-server
 
+BLACKLIST = blacklist.txt
+LOGINLOG = loginLog.txt
+
 # Libraries (if needed, you can adjust this)
 LIBS = -lldap -llber
 
@@ -42,7 +45,7 @@ $(SERVER_DIR)/%.o: $(SERVER_DIR)/%.cpp
 
 # Clean up build files
 clean:
-	rm -f $(CLIENT_OBJS) $(SERVER_OBJS) $(CLIENT_EXEC) $(SERVER_EXEC)
+	rm -f $(CLIENT_OBJS) $(SERVER_OBJS) $(CLIENT_EXEC) $(SERVER_EXEC) $(BLACKLIST) $(LOGINLOG)
 
 # Rebuild everything
 rebuild: clean all
