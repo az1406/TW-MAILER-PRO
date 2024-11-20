@@ -5,52 +5,50 @@
 #include <cctype>
 #include <unistd.h>
 
-// Use the `std` namespace to avoid prefixing with std::
 using namespace std;
 
-bool isNameOk(const string& name) {
+bool isNameOk(const string &name) {
     if (name.length() > 8) {
-        cout << "Given name is too long\n";
+        cerr << "Given name is too long\n";
         return false;
     }
     if (name.empty()) {
-        cout << "Entered empty name\n";
+        cerr << "Entered empty name\n";
         return false;
     }
-
     for (char c : name) {
         if (!isalnum(c)) {
-            cout << "Given name contains illegal characters\n";
+            cerr << "Given name contains illegal characters\n";
             return false;
         }
     }
     return true;
 }
 
-bool isSubjectOk(const string& subject) {
+bool isSubjectOk(const string &subject) {
     if (subject.length() > 80) {
-        cout << "Subject may only be up to 80 characters long\n";
+        cerr << "Subject may only be up to 80 characters long\n";
         return false;
     }
     return true;
 }
 
-bool isMessageOk(const string& message) {
+bool isMessageOk(const string &message) {
     if (message.length() > 927) {
-        cout << "Message may only be up to 927 characters long\n";
+        cerr << "Message may only be up to 927 characters long\n";
         return false;
     }
     return true;
 }
 
-bool isNumberOk(const string& number) {
+bool isNumberOk(const string &number) {
     if (number.empty()) {
-        cout << "No number was put in\n";
+        cerr << "No number was entered\n";
         return false;
     }
     for (char c : number) {
         if (!isdigit(c)) {
-            cout << "Given string contains non-digit characters\n";
+            cerr << "Invalid input: contains non-digit characters\n";
             return false;
         }
     }
@@ -58,45 +56,37 @@ bool isNumberOk(const string& number) {
 }
 
 string login() {
-    string username, password, package;
-
+    string username, password;
     do {
         cout << "Username: ";
         getline(cin, username);
     } while (!isNameOk(username));
 
     password = getpass("Password: ");
-    package = "LOGIN\n" + username + '\n' + password;
-    
-    return package;
+    return "LOGIN\n" + username + "\n" + password;
 }
 
-string send() {
-    string receiver, subject, message, hs, package;
+string sendMail() {
+    string receiver, subject, message, hs;
     do {
         cout << "Receiver: ";
         getline(cin, receiver);
     } while (!isNameOk(receiver));
-    
+
     do {
         cout << "Subject: ";
         getline(cin, subject);
     } while (!isSubjectOk(subject));
-    
+
     do {
-        cout << "Message:\n";
-        do {
-            hs = "";
-            getline(cin, hs);
-            if (hs != ".") {
-                message += hs;
-                message += "\n";
-            }
-        } while (hs != ".");
+        cout << "Message (end with '.' on a new line):\n";
+        message.clear();
+        while (getline(cin, hs) && hs != ".") {
+            message += hs + "\n";
+        }
     } while (!isMessageOk(message));
 
-    package = "SEND\n" + receiver + "\n" + subject + "\n" + message;
-    return package;
+    return "SEND\n" + receiver + "\n" + subject + "\n" + message;
 }
 
 string list() {
@@ -104,87 +94,92 @@ string list() {
 }
 
 string read() {
-    string msg_number, package;
+    string msg_number;
     do {
         cout << "Message number: ";
         getline(cin, msg_number);
     } while (!isNumberOk(msg_number));
 
-    package = "READ\n" + msg_number;
-    return package;
+    return "READ\n" + msg_number;
 }
 
 string del() {
-    string package, msg_number;
+    string msg_number;
     do {
         cout << "Message number: ";
         getline(cin, msg_number);
     } while (!isNumberOk(msg_number));
 
-    package = "DEL\n" + msg_number;
-    return package;
+    return "DEL\n" + msg_number;
 }
 
-bool printLogin(const string& response) {
-    char buffer[1024];
-    strcpy(buffer, response.c_str());
-    string hs = strtok(buffer, ";");
-
-    if (strcmp(hs.c_str(), "OK") == 0) {
-        cout << "<< Login Successful" << endl;
+bool printLogin(const string &response) {
+    if (response.find("OK") == 0) {
+        cout << "OK\n";
         return true;
-    } else if (strcmp(hs.c_str(), "ERR") == 0) {
-        cerr << "A server-side error occurred\n";
-        return false;
     }
-
-    cout << buffer << endl;
-    return true;
+    cerr << "Login Failed: " << response << "\n";
+    return false;
 }
 
-bool printList(const string& response) {
+bool printList(const string &response) {
     char buffer[1024];
     strcpy(buffer, response.c_str());
     string hs = strtok(buffer, "\n");
 
+    // Check if the response starts with OK
     if (strcmp(hs.c_str(), "OK") == 0) {
-        hs = strtok(NULL, "\n");
-        cout << "<< " << hs << endl;
-        for (int i = 1; i <= stoi(hs); i++) {
-            printf("<< Message number: %i | Subject: %s\n", i, strtok(NULL, "\n"));
+        hs = strtok(NULL, "\n");  // Get the number of messages
+        int messageCount = stoi(hs);
+
+        // Print each message with a number
+        for (int i = 1; i <= messageCount; i++) {
+            char *message = strtok(NULL, "\n");  // Get next message
+            if (message != nullptr) {
+                cout << i << ". " << message << endl;  // Add number prefix
+            }
         }
         return true;
     }
+
+    // Handle errors if the response is not OK
     cerr << "A server-side error occurred\n";
     return false;
 }
 
-bool printMessage(const string& response) {
+
+
+
+bool printMessage(const string &response) {
     char buffer[1024];
     strcpy(buffer, response.c_str());
     string hs = strtok(buffer, "\n");
-    cout << "<< " << hs << "\n";
 
+    // If the response starts with OK, parse the message details
     if (strcmp(hs.c_str(), "OK") == 0) {
-        cout << "Sender: " << strtok(NULL, "\n") << "\n";
-        cout << "Receiver: " << strtok(NULL, "\n") << "\n";
-        cout << "Subject: " << strtok(NULL, "\n") << "\n";
-        cout << "Message: " << strtok(NULL, "") << "\n";
+        cout << "OK" << endl;
+        cout << "From: " << strtok(NULL, "\n") << "\n";  // Sender
+        cout << "To: " << strtok(NULL, "\n") << "\n";    // Receiver
+        cout << "Subject: " << strtok(NULL, "\n") << "\n";  // Subject
+        cout << "Message: " << strtok(NULL, "") << "\n";  // Message body
         return true;
     }
-    cerr << "A server-side error occurred\n";
+    
+    cerr << "Error: " << response << endl;  // Error handling
     return false;
 }
 
-bool printReply(const string& response) {
+
+bool printReply(const string &response) {
     char buffer[1024];
     strcpy(buffer, response.c_str());
 
     if (strcmp(buffer, "OK") == 0) {
-        cout << "<< OK" << endl;
+        cout << "OK" << endl; // Ensure newline after OK
         return true;
     }
-    cout << "<< ERR" << endl;
+    cout << "ERR" << endl;
     cerr << "A server-side error occurred\n";
     return false;
 }
+
