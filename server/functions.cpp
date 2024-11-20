@@ -292,10 +292,49 @@ bool receiveFromClient(string buffer, string folder){
 string login(string buffer, string folder) {
     char buff[1024];
     strcpy(buff, buffer.c_str());
-    string username = getString(buffer);
-    string password = removeString(buffer, username);
+    string username = getString(buffer);  // Not used for blacklist check, but kept for LDAP
+    string password = removeString(buffer, username);  // Not used for blacklist check, but kept for LDAP
 
-    // LDAP Login Setup
+    // Handle IP blacklist checking
+    if (clientIP.empty()) {
+        cerr << "Couldn't access the client IP address" << endl;
+        return "ERR";
+    }
+
+    time_t now = time(0);
+
+    // Check if the client IP is blacklisted by reading from blacklist.txt
+    fstream blacklist;
+    string line;
+    bool isBlacklisted = false;
+
+    blacklist.open("blacklist.txt", ios::in);
+    if (blacklist.is_open()) {
+        while (getline(blacklist, line)) {
+            string ip, timeStr;
+            string delimiter = ";";
+
+            size_t pos = 0;
+            // Parse blacklist entry
+            pos = line.find(delimiter);
+            ip = line.substr(0, pos);
+            line.erase(0, pos + delimiter.length());
+            timeStr = line;
+
+            // If IP is blacklisted and the time difference is less than 60 seconds
+            if (clientIP == ip && (now - stoi(timeStr) < 60)) {
+                isBlacklisted = true;
+                break;
+            }
+        }
+        blacklist.close();
+    }
+
+    if (isBlacklisted) {
+        return "ERR\nYour IP is blacklisted. Please try again later.";
+    }
+
+    // LDAP Login Setup (this remains as is)
     char ldapBindUser[256];
     sprintf(ldapBindUser, "uid=%s,ou=people,dc=technikum-wien,dc=at", username.c_str());
 
@@ -349,98 +388,62 @@ string login(string buffer, string folder) {
         return "OK";
     }
 
-    // Handle blacklist checking
-    if (clientIP.empty()) {
-        cerr << "Couldn't access the client IP address" << endl;
-        return "ERR";
-    }
-
-    time_t now = time(0);
-
-    // Check if the user is blacklisted by checking blacklist.txt
-    fstream blacklist;
-    string line;
-    bool isBlacklisted = false;
-
-    blacklist.open("blacklist.txt", ios::in);
-    if (blacklist.is_open()) {
-        while (getline(blacklist, line)) {
-            string un, ip, timeStr;
-            string delimiter = ";";
-
-            size_t pos = 0;
-            // Parse blacklist entry
-            for (int i = 0; i < 3; ++i) {
-                pos = line.find(delimiter);
-                string token = line.substr(0, pos);
-                if (i == 0) un = token;
-                else if (i == 1) ip = token;
-                else if (i == 2) timeStr = token;
-                line.erase(0, pos + delimiter.length());
-            }
-
-            // If username or IP is blacklisted, check if the ban is still active
-            if ((username == un || clientIP == ip) && (now - stoi(timeStr) < 60)) {
-                isBlacklisted = true;
-                break;
-            }
-        }
-        blacklist.close();
-    }
-
-    if (isBlacklisted) {
-        return "ERR\nYou have too many failed attempts, please try again later.";
-    }
-
-    // Log the failed login attempt
+    // Log the failed login attempt based on the IP address
     fstream loginLogFile;
     loginLogFile.open("loginLog.txt", ios_base::app);
     if (!loginLogFile) {
         cerr << "loginLog.txt couldn't be opened" << endl;
         return "ERR";
     }
-    loginLogFile << username << ";" << clientIP << ";" << now << endl;
+
+    loginLogFile << clientIP << ";" << username << ";" << now << endl;
     loginLogFile.close();
 
-    // Now, check if this is the 3rd failed login attempt in the last minute
+    // Now, check if this is the 3rd failed login attempt from the same IP in the last minute
     int attemptCounter = 0;
 
     loginLogFile.open("loginLog.txt", ios::in);
     if (loginLogFile.is_open()) {
         while (getline(loginLogFile, line)) {
-            string un, ip, timeStr;
+            string ip, user, timeStr;
             string delimiter = ";";
 
             size_t pos = 0;
             // Parse log entry
-            for (int i = 0; i < 3; ++i) {
-                pos = line.find(delimiter);
-                string token = line.substr(0, pos);
-                if (i == 0) un = token;
-                else if (i == 1) ip = token;
-                else if (i == 2) timeStr = token;
-                line.erase(0, pos + delimiter.length());
-            }
+            pos = line.find(delimiter);
+            ip = line.substr(0, pos);
+            line.erase(0, pos + delimiter.length());
 
-            // Check if the username or IP is the same and failed attempts are within the last 60 seconds
-            if (now - stoi(timeStr) < 60 && (username == un || clientIP == ip)) {
+            pos = line.find(delimiter);
+            user = line.substr(0, pos);
+            line.erase(0, pos + delimiter.length());
+
+            timeStr = line;
+
+            // Check if the IP is the same and failed attempts are within the last 60 seconds
+            if (clientIP == ip && (now - stoi(timeStr) < 60)) {
                 attemptCounter++;
             }
         }
         loginLogFile.close();
     }
 
-    // If there have been 3 or more failed login attempts in the last minute, blacklist the user
+    // If there have been 3 or more failed login attempts from the same IP in the last minute, blacklist the IP
     if (attemptCounter >= 3) {
         fstream blacklistFile;
         blacklistFile.open("blacklist.txt", ios_base::app);
-        blacklistFile << username << ";" << clientIP << ";" << now << endl;
+        if (!blacklistFile) {
+            cerr << "blacklist.txt couldn't be opened, creating a new file" << endl;
+            blacklistFile.open("blacklist.txt", ios_base::out);  // Create the file if it doesn't exist
+        }
+        blacklistFile << clientIP << ";" << now << endl;
         blacklistFile.close();
-        return "ERR\nYou have too many failed attempts, please try again later.";
+        return "ERR\nYour IP is blacklisted. Please try again later.";
     }
 
     return "ERR";
 }
+
 
 bool lockFile(int fd) {
    if(flock(fd, LOCK_SH | LOCK_NB)) {
