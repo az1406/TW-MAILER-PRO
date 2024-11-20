@@ -156,7 +156,6 @@ void signalHandler(int sig) {
         exit(sig);
     }
 }
-
 void printUsage(void) {
     printf("Incorrect usage. Start the server using: \"./twmailer-server <port> <mail-spool-directoryname>\"\n");
     exit(EXIT_FAILURE);

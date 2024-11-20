@@ -127,22 +127,18 @@ bool printList(const string &response) {
     strcpy(buffer, response.c_str());
     string hs = strtok(buffer, "\n");
 
-    // Check if the response starts with OK
     if (strcmp(hs.c_str(), "OK") == 0) {
-        hs = strtok(NULL, "\n");  // Get the number of messages
+        hs = strtok(NULL, "\n");  
         int messageCount = stoi(hs);
 
-        // Print each message with a number
         for (int i = 1; i <= messageCount; i++) {
-            char *message = strtok(NULL, "\n");  // Get next message
+            char *message = strtok(NULL, "\n");  
             if (message != nullptr) {
-                cout << i << ". " << message << endl;  // Add number prefix
+                cout << i << ". " << message << endl;  
             }
         }
         return true;
     }
-
-    // Handle errors if the response is not OK
     cerr << "A server-side error occurred\n";
     return false;
 }

@@ -15,7 +15,6 @@ int main(int argc, char **argv) {
     struct sockaddr_in address;
     bool isLogin = false;
 
-    // Create socket
     if ((client_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
         perror("Error creating socket");
         exit(EXIT_FAILURE);
@@ -24,7 +23,6 @@ int main(int argc, char **argv) {
     memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
 
-    // Validate arguments
     if (argc != 3) {
         cerr << "Usage: ./twmailer-client <ip> <port>\n";
         exit(EXIT_FAILURE);
@@ -47,7 +45,6 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    // Connect to server
     if (connect(client_socket, (struct sockaddr *)&address, sizeof(address)) == -1) {
         perror("Cannot connect to server");
         exit(EXIT_FAILURE);
@@ -55,14 +52,12 @@ int main(int argc, char **argv) {
 
     cout << "Connected to server (" << inet_ntoa(address.sin_addr) << ")\n";
 
-    // Receive server greeting
     int size = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
     if (size > 0) {
         buffer[size] = '\0';
         cout << buffer;
     }
 
-    // Command processing loop
     while (true) {
         cout << ">> ";
         if (fgets(buffer, BUFFER_SIZE, stdin) != nullptr) {
@@ -106,7 +101,7 @@ int main(int argc, char **argv) {
         send(client_socket, hs.c_str(), hs.size(), 0);
         size = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
         buffer[size] = '\0';
-        printMessage(buffer);  // Properly format the message
+        printMessage(buffer); 
     } else {
         cout << "Please login first\n";
     }
@@ -125,6 +120,5 @@ int main(int argc, char **argv) {
             }
         }
     }
-
     return 0;
 }

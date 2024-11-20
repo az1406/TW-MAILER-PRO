@@ -14,7 +14,8 @@
 #include <filesystem>
 #include <fstream>
 #include <ldap.h>
-
+using namespace std;
+namespace fs = std::filesystem;
 
 #define BUF 1024
 
@@ -22,16 +23,12 @@
 #define MAX_NAME 8
 #define MAX_SUBJ 80
 
-
-
 const char *ldapUri = "ldap://ldap.technikum-wien.at:389";
 const int ldapVersion = LDAP_VERSION3;
 bool successfulLogin = false;
 int abortRequested = 0;
 int create_socket = -1;
 int new_socket = -1;
-using namespace std;
-namespace fs = std::filesystem;
 string sender = "";
 string clientIP = "";
 pid_t childpid;
@@ -40,7 +37,6 @@ string removeString(string buffer, string s1)
 {
    return buffer.erase(0, s1.length() + 1);
 }
-
 
 string getString(string buffer)
 {
@@ -66,17 +62,15 @@ int getNumOfFiles(string folder)
    }
    return count; /* - 1 because numOfFiles.txt doesn't count to the number of messages */
 }
+
 bool verifyStringLength(string string, int maxStringLength)
 {
    return (string.length() <= (unsigned)maxStringLength);
 }
 
-
 bool deleteMessage(string buffer, string folder)
 {
-
    string messageNumber;
-
    messageNumber = buffer;
    string usernameFolder = folder + "/" + sender;
    string searchedFileDirectory;
@@ -96,7 +90,6 @@ bool deleteMessage(string buffer, string folder)
       if(!fs::exists(searchedFileDirectory)) {
          return false;
       }
-
       fs::remove(searchedFileDirectory);
    } catch (fs::filesystem_error& error) {
       cerr << error.what() << endl;
@@ -107,7 +100,6 @@ bool deleteMessage(string buffer, string folder)
 
 string list(string folder)
 {
-
    if(!verifyStringLength(sender, MAX_NAME)) {
       return "ERR";
    }
@@ -122,8 +114,6 @@ string list(string folder)
       cerr << error.what() << endl;
       return "ERR";
    }
-   
-
    const fs::path path = userFolder; 
    string helperString; /* return string */
 
@@ -152,7 +142,6 @@ string list(string folder)
             cout << "file.is_open() error" << endl;
             return "ERR";
          }
-
          file.close();
          helperString += subject;
 
@@ -241,22 +230,16 @@ bool receiveFromClient(string buffer, string folder){
    }
    buffer = removeString(buffer, receiver);
    
-   subject = getString(buffer); /* get subject */
+   subject = getString(buffer); 
    if(!verifyStringLength(subject, MAX_SUBJ)) {
       return false;
    }
    buffer = removeString(buffer, subject);
-   
-   message = buffer; /* get message */
-
+   message = buffer; 
    cout << "Receiver: " << receiver << endl << "Subject: " << subject << endl << "Message: " << message << endl;
-
    string receiverFolder = folder + "/" + receiver;
-
-  
    try {
-      /* receiver does not have a folder */
-      if(!fs::exists(receiverFolder)) { 
+     if(!fs::exists(receiverFolder)) { 
          fs::create_directory(receiverFolder);
       }
    } catch (fs::filesystem_error& error) {
@@ -266,8 +249,8 @@ bool receiveFromClient(string buffer, string folder){
 
    
    ofstream outfile; 
-   string newFile = ""; /* name of the new file in which the message will be stored */
-   string fileNumber = ""; /* make sure to get the highest file number, this can be a problem when someone deletes a lot of messages */
+   string newFile = ""; 
+   string fileNumber = ""; 
    
    
    fileNumber += getHighestFileNumber(receiverFolder);
@@ -275,8 +258,7 @@ bool receiveFromClient(string buffer, string folder){
       return false;
    }
    newFile += receiverFolder + "/" + fileNumber + ".txt";
-   
-   /* write sender(\n)receiver(\n)subject(\n)message into file */
+
    outfile.open(newFile.c_str()); 
    if(!outfile){
       cerr << "newFile couldn't be opened" << endl;
@@ -286,16 +268,14 @@ bool receiveFromClient(string buffer, string folder){
    outfile.close(); 
 
    return true;
-   
 }
 
 string login(string buffer, string folder) {
     char buff[1024];
     strcpy(buff, buffer.c_str());
-    string username = getString(buffer);  // Not used for blacklist check, but kept for LDAP
-    string password = removeString(buffer, username);  // Not used for blacklist check, but kept for LDAP
+    string username = getString(buffer);  
+    string password = removeString(buffer, username); 
 
-    // Handle IP blacklist checking
     if (clientIP.empty()) {
         cerr << "Couldn't access the client IP address" << endl;
         return "ERR";
@@ -303,7 +283,6 @@ string login(string buffer, string folder) {
 
     time_t now = time(0);
 
-    // Check if the client IP is blacklisted by reading from blacklist.txt
     fstream blacklist;
     string line;
     bool isBlacklisted = false;
@@ -315,13 +294,11 @@ string login(string buffer, string folder) {
             string delimiter = ";";
 
             size_t pos = 0;
-            // Parse blacklist entry
             pos = line.find(delimiter);
             ip = line.substr(0, pos);
             line.erase(0, pos + delimiter.length());
             timeStr = line;
 
-            // If IP is blacklisted and the time difference is less than 60 seconds
             if (clientIP == ip && (now - stoi(timeStr) < 60)) {
                 isBlacklisted = true;
                 break;
@@ -334,7 +311,6 @@ string login(string buffer, string folder) {
         return "ERR\nYour IP is blacklisted. Please try again later.";
     }
 
-    // LDAP Login Setup (this remains as is)
     char ldapBindUser[256];
     sprintf(ldapBindUser, "uid=%s,ou=people,dc=technikum-wien,dc=at", username.c_str());
 
@@ -349,7 +325,6 @@ string login(string buffer, string folder) {
         return "ERR";
     }
 
-    // Set version options
     rc = ldap_set_option(ldapHandle, LDAP_OPT_PROTOCOL_VERSION, &ldapVersion);
     if(rc != LDAP_OPT_SUCCESS) {
         fprintf(stderr, "ldap_set_option(PROTOCOL_VERSION): %s\n", ldap_err2string(rc));
@@ -357,7 +332,6 @@ string login(string buffer, string folder) {
         return "ERR";
     }
 
-    // Start TLS connection
     rc = ldap_start_tls_s(ldapHandle, NULL, NULL);
     if (rc != LDAP_SUCCESS) {
         fprintf(stderr, "ldap_start_tls_s(): %s\n", ldap_err2string(rc));
@@ -365,7 +339,6 @@ string login(string buffer, string folder) {
         return "ERR";
     }
 
-    // Bind credentials
     BerValue bindCredentials;
     bindCredentials.bv_val = (char *)ldapBindPassword;
     bindCredentials.bv_len = strlen(ldapBindPassword);
@@ -373,14 +346,13 @@ string login(string buffer, string folder) {
 
     rc = ldap_sasl_bind_s(ldapHandle, ldapBindUser, LDAP_SASL_SIMPLE, &bindCredentials, NULL, NULL, &servercredp);
 
-    // Free memory
     ldap_unbind_ext_s(ldapHandle, NULL, NULL);
 
     if(rc == LDAP_SUCCESS) {
         sender = username;
         successfulLogin = true;
 
-        // Check if receiver folder exists
+        
         string senderFolder = folder + "/" + sender;
         if (!fs::exists(senderFolder)) {
             fs::create_directory(senderFolder);
@@ -388,7 +360,6 @@ string login(string buffer, string folder) {
         return "OK";
     }
 
-    // Log the failed login attempt based on the IP address
     fstream loginLogFile;
     loginLogFile.open("loginLog.txt", ios_base::app);
     if (!loginLogFile) {
@@ -399,7 +370,6 @@ string login(string buffer, string folder) {
     loginLogFile << clientIP << ";" << username << ";" << now << endl;
     loginLogFile.close();
 
-    // Now, check if this is the 3rd failed login attempt from the same IP in the last minute
     int attemptCounter = 0;
 
     loginLogFile.open("loginLog.txt", ios::in);
@@ -409,7 +379,7 @@ string login(string buffer, string folder) {
             string delimiter = ";";
 
             size_t pos = 0;
-            // Parse log entry
+            
             pos = line.find(delimiter);
             ip = line.substr(0, pos);
             line.erase(0, pos + delimiter.length());
@@ -420,7 +390,7 @@ string login(string buffer, string folder) {
 
             timeStr = line;
 
-            // Check if the IP is the same and failed attempts are within the last 60 seconds
+            
             if (clientIP == ip && (now - stoi(timeStr) < 60)) {
                 attemptCounter++;
             }
@@ -428,13 +398,13 @@ string login(string buffer, string folder) {
         loginLogFile.close();
     }
 
-    // If there have been 3 or more failed login attempts from the same IP in the last minute, blacklist the IP
+    
     if (attemptCounter >= 3) {
         fstream blacklistFile;
         blacklistFile.open("blacklist.txt", ios_base::app);
         if (!blacklistFile) {
             cerr << "blacklist.txt couldn't be opened, creating a new file" << endl;
-            blacklistFile.open("blacklist.txt", ios_base::out);  // Create the file if it doesn't exist
+            blacklistFile.open("blacklist.txt", ios_base::out);  
         }
         blacklistFile << clientIP << ";" << now << endl;
         blacklistFile.close();
@@ -444,10 +414,9 @@ string login(string buffer, string folder) {
     return "ERR";
 }
 
-
 bool lockFile(int fd) {
    if(flock(fd, LOCK_SH | LOCK_NB)) {
-      if(errno == EWOULDBLOCK) { /* File is locked, let's wait */
+      if(errno == EWOULDBLOCK) { 
          if(flock(fd, LOCK_SH) == -1 ){
             cerr << "Failed to lock the file " << endl;
             close(fd);
@@ -471,19 +440,18 @@ bool unlockFile(int fd) {
    close(fd);
    return true;
 }
+
 void *clientCommunication(void *data, string folder)
 {
    char buffer[BUF];
    int size;
    int *current_socket = (int *)data;
 
-
    strcpy(buffer, "Welcome to the server!\r\nPlease enter your commands...\r\n");
    if (send(*current_socket, buffer, strlen(buffer), 0) == -1) {
       perror("send failed");
       return NULL;
    }
-
 
    do {
       size = recv(*current_socket, buffer, BUF - 1, 0);
@@ -502,7 +470,6 @@ void *clientCommunication(void *data, string folder)
          break;
       }
 
-      // remove ugly debug message, because of the sent newline of client
       if (buffer[size - 2] == '\r' && buffer[size - 1] == '\n') {
          size -= 2;
       }
@@ -511,13 +478,10 @@ void *clientCommunication(void *data, string folder)
       }
 
       buffer[size] = '\0';
-
       string flag = getString(buffer);
       string bufferString = removeString(buffer, flag);
-      
       string response = "";
 
-      
       if(strcasecmp(flag.c_str(), "LOGIN") == 0) {
          response = login(bufferString, folder);
       }
@@ -543,8 +507,7 @@ void *clientCommunication(void *data, string folder)
          return NULL;
       }
       
-
-   } while (strcmp(buffer, "quit") != 0 && !abortRequested);
+} while (strcmp(buffer, "quit") != 0 && !abortRequested);
 
    if (*current_socket != -1) {
       if (shutdown(*current_socket, SHUT_RDWR) == -1) {
