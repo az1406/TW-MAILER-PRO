@@ -67,7 +67,7 @@ bool verifyStringLength(string string, int maxStringLength)
 {
    return (string.length() <= (unsigned)maxStringLength);
 }
-
+// Function to delete a message based on its number in the mail folder
 bool deleteMessage(string buffer, string folder)
 {
    string messageNumber;
@@ -75,6 +75,7 @@ bool deleteMessage(string buffer, string folder)
    string usernameFolder = folder + "/" + sender;
    string searchedFileDirectory;
    int counter = 0;
+   // Iterate through the folder and find the message by its number
    for (fs::directory_entry e: fs::directory_iterator(usernameFolder)){
       counter++;
       if(counter > stoi(buffer)){
@@ -90,23 +91,23 @@ bool deleteMessage(string buffer, string folder)
       if(!fs::exists(searchedFileDirectory)) {
          return false;
       }
-      fs::remove(searchedFileDirectory);
+      fs::remove(searchedFileDirectory); // Try to remove the file
    } catch (fs::filesystem_error& error) {
       cerr << error.what() << endl;
       return false;
    }
    return true;
 }
-
+// Function to list all messages for a user, including the number of files and their subjects
 string list(string folder)
 {
    if(!verifyStringLength(sender, MAX_NAME)) {
       return "ERR";
    }
-   string userFolder = folder + "/" + sender; /* get username's folder */
+   string userFolder = folder + "/" + sender; // get username's folder 
    
    try {
-      if(!fs::exists(userFolder)){ /* username doesn't have a folder -> return 0 */
+      if(!fs::exists(userFolder)){ 
         cout << userFolder << "does not exist" << endl;
          return to_string(0);
       }
@@ -115,16 +116,17 @@ string list(string folder)
       return "ERR";
    }
    const fs::path path = userFolder; 
-   string helperString; /* return string */
+   string helperString; 
 
    helperString += to_string(getNumOfFiles(userFolder));
 
+//Iterate through the files in the user folder
    try{
       for (const auto& entry : fs::directory_iterator(path)) {
-         const auto filenameStr = entry.path().filename().string(); /* get name of file */
+         const auto filenameStr = entry.path().filename().string(); 
          helperString += SEPERATOR;
          
-         /* open the file and get the subject */
+         
          string line;
          string subject; 
          ifstream file(userFolder + "/" + filenameStr);
@@ -133,7 +135,7 @@ string list(string folder)
          if(file.is_open()) {
             while(getline(file, line)){
                ++counter;
-               if(counter == 3) { /* subject is in the third line of every file */
+               if(counter == 3) { 
                   subject = line;
                }
             }
@@ -189,7 +191,7 @@ string read(string buffer, string folder)
 
    string message; 
    string line;
-
+// Read the file line by line and append to the message string
  ifstream file(searchedFileDirectory); 
    if(file.is_open()) {
       while(!file.eof()) { 
@@ -211,6 +213,7 @@ string getHighestFileNumber(string folder)
 {
    fs::directory_entry e;
    for(int i = 1; ; i++){
+      
       e = fs::directory_entry(folder + "/" + to_string(i) + ".txt");
       if(!e.exists()){
          return to_string(i);
@@ -218,26 +221,26 @@ string getHighestFileNumber(string folder)
 
    }
 }
-
+// Receives a message from the client, validates input, creates a file for the message, and saves it.
 bool receiveFromClient(string buffer, string folder){
 
    string receiver, subject, message;
       
    cout << "buffer: " << buffer << endl;
-   receiver = getString(buffer); /* get receiver */
+   receiver = getString(buffer); // Extract the receiver's name from the buffer
    if(!verifyStringLength(receiver, MAX_NAME)) {
       return false;
    }
-   buffer = removeString(buffer, receiver);
+   buffer = removeString(buffer, receiver);// Remove the receiver's name from the buffer after extracting
    
-   subject = getString(buffer); 
+   subject = getString(buffer);  // Extract the subject from the remaining buffer
    if(!verifyStringLength(subject, MAX_SUBJ)) {
       return false;
    }
    buffer = removeString(buffer, subject);
    message = buffer; 
    cout << "Receiver: " << receiver << endl << "Subject: " << subject << endl << "Message: " << message << endl;
-   string receiverFolder = folder + "/" + receiver;
+   string receiverFolder = folder + "/" + receiver;// Construct the folder path for the receiver
    try {
      if(!fs::exists(receiverFolder)) { 
          fs::create_directory(receiverFolder);
@@ -264,12 +267,13 @@ bool receiveFromClient(string buffer, string folder){
       cerr << "newFile couldn't be opened" << endl;
       return false;
    }
+   // Write the sender, receiver, subject, and message to the file
    outfile << sender << endl << receiver << endl << subject << endl << message;
    outfile.close(); 
 
    return true;
 }
-
+// This function handles user login by validating credentials, checking if the IP is blacklisted, and interacting with an LDAP server.
 string login(string buffer, string folder) {
     char buff[1024];
     strcpy(buff, buffer.c_str());
@@ -285,7 +289,7 @@ string login(string buffer, string folder) {
 
     fstream blacklist;
     string line;
-    bool isBlacklisted = false;
+    bool isBlacklisted = false; // Flag to check if the IP is blacklisted
 
     blacklist.open("blacklist.txt", ios::in);
     if (blacklist.is_open()) {
@@ -310,7 +314,7 @@ string login(string buffer, string folder) {
     if (isBlacklisted) {
         return "ERR\nYour IP is blacklisted. Please try again later.";
     }
-
+// Prepare the LDAP bind user with the format uid=username,ou=people,dc=technikum-wien,dc=at
     char ldapBindUser[256];
     sprintf(ldapBindUser, "uid=%s,ou=people,dc=technikum-wien,dc=at", username.c_str());
 
@@ -319,26 +323,26 @@ string login(string buffer, string folder) {
 
     int rc = 0;
     LDAP *ldapHandle;
-    rc = ldap_initialize(&ldapHandle, ldapUri);
+    rc = ldap_initialize(&ldapHandle, ldapUri); // Initialize the LDAP connection
     if (rc != LDAP_SUCCESS) {
         fprintf(stderr, "ldap_init failed\n");
         return "ERR";
     }
-
+ // Set the LDAP protocol version to 3
     rc = ldap_set_option(ldapHandle, LDAP_OPT_PROTOCOL_VERSION, &ldapVersion);
     if(rc != LDAP_OPT_SUCCESS) {
         fprintf(stderr, "ldap_set_option(PROTOCOL_VERSION): %s\n", ldap_err2string(rc));
         ldap_unbind_ext_s(ldapHandle, NULL, NULL);
         return "ERR";
     }
-
+// Start the TLS encryption for the LDAP connection
     rc = ldap_start_tls_s(ldapHandle, NULL, NULL);
     if (rc != LDAP_SUCCESS) {
         fprintf(stderr, "ldap_start_tls_s(): %s\n", ldap_err2string(rc));
         ldap_unbind_ext_s(ldapHandle, NULL, NULL);
         return "ERR";
     }
-
+ // Perform SASL
     BerValue bindCredentials;
     bindCredentials.bv_val = (char *)ldapBindPassword;
     bindCredentials.bv_len = strlen(ldapBindPassword);
@@ -371,7 +375,7 @@ string login(string buffer, string folder) {
     loginLogFile.close();
 
     int attemptCounter = 0;
-
+// Reopen the login log file to check the number of failed login attempts in the last 60 seconds
     loginLogFile.open("loginLog.txt", ios::in);
     if (loginLogFile.is_open()) {
         while (getline(loginLogFile, line)) {
@@ -398,7 +402,7 @@ string login(string buffer, string folder) {
         loginLogFile.close();
     }
 
-    
+ // If there are 3 or more failed attempts in the last 60 seconds, blacklist the client's IP
     if (attemptCounter >= 3) {
         fstream blacklistFile;
         blacklistFile.open("blacklist.txt", ios_base::app);
@@ -413,10 +417,10 @@ string login(string buffer, string folder) {
 
     return "ERR";
 }
-
+// This function attempts to lock the file associated with the given file descriptor (fd) for shared access
 bool lockFile(int fd) {
-   if(flock(fd, LOCK_SH | LOCK_NB)) {
-      if(errno == EWOULDBLOCK) { 
+   if(flock(fd, LOCK_SH | LOCK_NB)) { // Try to acquire a shared lock without blocking
+      if(errno == EWOULDBLOCK) {   // If the lock can't be acquired immediately (EWOULDBLOCK), try again with blocking lock
          if(flock(fd, LOCK_SH) == -1 ){
             cerr << "Failed to lock the file " << endl;
             close(fd);
@@ -430,7 +434,7 @@ bool lockFile(int fd) {
    }
    return true;
 }
-
+// This function unlocks the file associated with the given file descriptor (fd)
 bool unlockFile(int fd) {
    if(flock(fd, LOCK_UN) == -1) {
       cerr << "Failed to unlock the file!" << endl;
@@ -440,7 +444,7 @@ bool unlockFile(int fd) {
    close(fd);
    return true;
 }
-
+// This function handles the communication between the server and a single client
 void *clientCommunication(void *data, string folder)
 {
    char buffer[BUF];
@@ -485,7 +489,7 @@ void *clientCommunication(void *data, string folder)
       if(strcasecmp(flag.c_str(), "LOGIN") == 0) {
          response = login(bufferString, folder);
       }
-
+   // If the user is successfully logged in, process other commands
       if(successfulLogin) {
          if (strcasecmp(flag.c_str(), "SEND") == 0) {
             response = receiveFromClient(bufferString, folder) ? "OK" : "ERR";
@@ -509,7 +513,7 @@ void *clientCommunication(void *data, string folder)
       
 } while (strcmp(buffer, "quit") != 0 && !abortRequested);
 
-   if (*current_socket != -1) {
+   if (*current_socket != -1) { // After the loop ends, shutdown and close the socket connection
       if (shutdown(*current_socket, SHUT_RDWR) == -1) {
          perror("shutdown new_socket");
       }

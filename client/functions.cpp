@@ -6,7 +6,7 @@
 #include <unistd.h>
 
 using namespace std;
-
+// Validate that the provided username
 bool isNameOk(const string &name) {
     if (name.length() > 8) {
         cerr << "Given name is too long\n";
@@ -24,7 +24,7 @@ bool isNameOk(const string &name) {
     }
     return true;
 }
-
+// Validate the length of the email subject
 bool isSubjectOk(const string &subject) {
     if (subject.length() > 80) {
         cerr << "Subject may only be up to 80 characters long\n";
@@ -32,7 +32,7 @@ bool isSubjectOk(const string &subject) {
     }
     return true;
 }
-
+// Validate the length of the email message
 bool isMessageOk(const string &message) {
     if (message.length() > 927) {
         cerr << "Message may only be up to 927 characters long\n";
@@ -54,7 +54,7 @@ bool isNumberOk(const string &number) {
     }
     return true;
 }
-
+// Construct the LOGIN command with user credentials
 string login() {
     string username, password;
     do {
@@ -62,10 +62,10 @@ string login() {
         getline(cin, username);
     } while (!isNameOk(username));
 
-    password = getpass("Password: ");
+    password = getpass("Password: ");// Securely prompt for the password
     return "LOGIN\n" + username + "\n" + password;
 }
-
+// Construct the SEND command with recipient, subject, and message
 string sendMail() {
     string receiver, subject, message, hs;
     do {
@@ -95,14 +95,14 @@ string list() {
 
 string read() {
     string msg_number;
-    do {
+    do { //Validate the message number
         cout << "Message number: ";
         getline(cin, msg_number);
     } while (!isNumberOk(msg_number));
 
     return "READ\n" + msg_number;
 }
-
+// Construct the DELETE command
 string del() {
     string msg_number;
     do {
@@ -112,7 +112,7 @@ string del() {
 
     return "DEL\n" + msg_number;
 }
-
+// Handle and print the server response for the LOGIN command
 bool printLogin(const string &response) {
     if (response.find("OK") == 0) {
         cout << "OK\n";
@@ -121,7 +121,7 @@ bool printLogin(const string &response) {
     cerr << "Login Failed: " << response << "\n";
     return false;
 }
-
+// Parse and display the response from the LIST command
 bool printList(const string &response) {
     char buffer[1024];
     strcpy(buffer, response.c_str());
@@ -130,7 +130,7 @@ bool printList(const string &response) {
     if (strcmp(hs.c_str(), "OK") == 0) {
         hs = strtok(NULL, "\n");  
         int messageCount = stoi(hs);
-
+// Loop through and print each message subject
         for (int i = 1; i <= messageCount; i++) {
             char *message = strtok(NULL, "\n");  
             if (message != nullptr) {
@@ -143,9 +143,7 @@ bool printList(const string &response) {
     return false;
 }
 
-
-
-
+// Parse and display the response from the READ command
 bool printMessage(const string &response) {
     char buffer[1024];
     strcpy(buffer, response.c_str());
@@ -154,24 +152,24 @@ bool printMessage(const string &response) {
     // If the response starts with OK, parse the message details
     if (strcmp(hs.c_str(), "OK") == 0) {
         cout << "OK" << endl;
-        cout << "From: " << strtok(NULL, "\n") << "\n";  // Sender
-        cout << "To: " << strtok(NULL, "\n") << "\n";    // Receiver
-        cout << "Subject: " << strtok(NULL, "\n") << "\n";  // Subject
-        cout << "Message: " << strtok(NULL, "") << "\n";  // Message body
+        cout << "From: " << strtok(NULL, "\n") << "\n";  // Sender...
+        cout << "To: " << strtok(NULL, "\n") << "\n";    
+        cout << "Subject: " << strtok(NULL, "\n") << "\n";  
+        cout << "Message: " << strtok(NULL, "") << "\n"; 
         return true;
     }
     
-    cerr << "Error: " << response << endl;  // Error handling
+    cerr << "Error: " << response << endl; 
     return false;
 }
 
-
+// Handle and print the response 
 bool printReply(const string &response) {
     char buffer[1024];
     strcpy(buffer, response.c_str());
 
     if (strcmp(buffer, "OK") == 0) {
-        cout << "OK" << endl; // Ensure newline after OK
+        cout << "OK" << endl;
         return true;
     }
     cout << "ERR" << endl;

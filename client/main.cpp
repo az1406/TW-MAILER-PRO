@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     char buffer[BUFFER_SIZE];
     struct sockaddr_in address;
     bool isLogin = false;
-
+// Create a TCP socket
     if ((client_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
         perror("Error creating socket");
         exit(EXIT_FAILURE);
@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
 
     memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
-
+// Check if enough arguments are passed (IP and port)
     if (argc != 3) {
         cerr << "Usage: ./twmailer-client <ip> <port>\n";
         exit(EXIT_FAILURE);
@@ -35,16 +35,16 @@ int main(int argc, char **argv) {
 
     try {
         int port = stoi(argv[2]);
-        if (port < 1024 || port > 65535) {
+        if (port < 1024 || port > 65535) { // Ensure the port is within valid ran
             cerr << "Port must be between 1024 and 65535\n";
             exit(EXIT_FAILURE);
         }
-        address.sin_port = htons(port);
+        address.sin_port = htons(port); // Set the port in network byte order
     } catch (const invalid_argument &) {
         cerr << "Invalid port\n";
         exit(EXIT_FAILURE);
     }
-
+// Attempt to connect to the server
     if (connect(client_socket, (struct sockaddr *)&address, sizeof(address)) == -1) {
         perror("Cannot connect to server");
         exit(EXIT_FAILURE);
@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
         buffer[size] = '\0';
         cout << buffer;
     }
-
+// Main loop to handle user input and communication with server
     while (true) {
         cout << ">> ";
         if (fgets(buffer, BUFFER_SIZE, stdin) != nullptr) {
@@ -69,10 +69,10 @@ int main(int argc, char **argv) {
                 shutdown(client_socket, SHUT_RDWR);
                 close(client_socket);
                 break;
-            } else if (strcasecmp(buffer, "login") == 0) {
-                string hs = login();
-                send(client_socket, hs.c_str(), hs.size(), 0);
-                size = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+            } else if (strcasecmp(buffer, "login") == 0) { // Handle "login" command
+                string hs = login(); 
+                send(client_socket, hs.c_str(), hs.size(), 0);// Send login request
+                size = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);// Receive login response
                 buffer[size] = '\0';
                 isLogin = printLogin(buffer);
             } else if (strcasecmp(buffer, "list") == 0) {
